@@ -1,0 +1,84 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+# Stopping services
+    - name: Stopping Tomcat
+      service:
+        name: tomcat
+        state: stopped
+    - name: Stopping MariaDB
+      service:
+        name: mariadb
+        state: stopped
+    - name: Stopping Apache
+      service:
+        name: httpd
+        state: stopped
+
+# Creating archiving directores for Apache and Tomcat
+    - name: Create Apache archives directory 
+      file: 
+        path: /data/archives/logs/httpd/
+        state: directory
+        recurse: true
+    - name: Create Tomcat archives directory 
+      file: 
+        path: /data/archives/logs/tomcat/
+        state: directory
+        recurse: true
+
+#Setting files access control lists on JKS and P12 certs
+    - name: Grant Tomcat access to localhost-bundle P12
+      command: "setfacl -m u:tomcat:r {{ ssl_certificate_p12_greybox }}"
+    - name: Grant Tomcat access to localhost JKS
+      command: "setfacl -m u:tomcat:r {{ ssl_certificate_keystore_localhost }}"
+    - name: "Grant MySQL Access to the localhost private key"
+      command: "setfacl -m u:mysql:r {{ ssl_certificate_key_greybox }}"
+
+# Decrease Java startup time
+    - name: "Set java security to decrease startup times"
+      raw: "path=`find /usr/lib/jvm/ -name java.security`;sed -i 's|/dev/random|/dev/urandom|g' $path"
+
+# Copying httpd configuration files
+    - name: Install SSL.conf
+      template:
+        src: ../files/ssl.conf
+        dest: /etc/httpd/conf.d/ssl.conf
+        mode: "0640"
+        owner: root
+        group: root
+    - name: Install camkey AJP Config
+      template: 
+        src: ../files/extcamkey.conf
+        dest: /etc/httpd/conf.d/extcamkey.conf
+        mode: "0640"
+        owner: root
+        group: root
+
+# Copying tomcat configuration files
+    - name: Install camkey.properties for web services
+      template:
+        src: ../files/camkey.properties
+        dest: /etc/tomcat/camkey.properties
+        mode: "0640"
+        group: tomcat
+    - name: Install Tomcat configuration file
+      copy:
+        src: ../files/tomcat.conf
+        dest: /etc/tomcat
+        mode: "0640"
+        group: tomcat
+    - name: Install Tomcat Server.xml
+      copy:
+        src: ../files/server.xml
+        dest: /etc/tomcat
+        mode: "0640"
+        group: tomcat
+    - name: Install SSL.conf
+      template:
+        src: ../files/ssl.conf
+        dest: /etc/httpd/conf.d/ssl.conf
+        mode: "0640"
+        group: root

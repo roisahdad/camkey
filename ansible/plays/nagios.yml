@@ -1,0 +1,14 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+  # Install Nagios packages
+    - name: Optimizing yum cache
+      shell:
+        cmd: |
+          sudo yum clean all && sudo yum makecache fast
+    - name: Install core packages
+      yum:
+        name: ['nagios-plugins-disk.x86_64', 'nagios-plugins-dns.x86_64', 'nagios-plugins-http.x86_64', 'nagios-plugins-load.x86_64', 'nagios-plugins-log.x86_64', 'nagios-plugins-nagios.x86_64', 'nagios-plugins-nrpe.x86_64', 'nagios-plugins-pgsql.x86_64', 'nagios-plugins-ping.x86_64', 'nagios-plugins-procs.x86_64','nagios-plugins-ssh.x86_64', 'nagios-plugins-swap.x86_64', 'nagios-plugins-uptime.x86_64', 'nagios-plugins-users.x86_64']
+        state: latest

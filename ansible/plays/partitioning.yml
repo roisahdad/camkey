@@ -1,0 +1,24 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+    - name: Create new primary partition
+      parted:
+        device: /dev/xvdf
+        label: msdos
+        number: 1
+        state: present
+        part_end: 100%
+
+    - name: Create a ext4 filesystem on /dev/xvdf
+      filesystem:
+        fstype: ext4
+        dev: /dev/xvdf
+
+    - name: Mount /dev/xvdf
+      mount:
+        fstype: ext4
+        src: /dev/xvdf
+        path: /data
+        state: mounted

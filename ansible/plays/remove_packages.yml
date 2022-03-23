@@ -1,0 +1,29 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+#Stop active core services
+  - name: Ensure Apache is stopped
+    service:
+      name: httpd
+      state: stopped
+  - name: Ensure Tomcat is stopped
+    service:
+      name: tomcat
+      state: stopped
+  - name: Ensure mariadb is stopped
+    service:
+      name: mariadb
+      state: stopped
+
+# Install all required packages
+  - name: Remove core packages
+    yum: 
+      name: ['httpd.x86_64', 'httpd-tools.x86_64', 'tomcat.noarch', 'tomcat-el-2.2-api.noarch', 'tomcat-jsp-2.2-api.noarch', 'tomcat-lib.noarch', 'tomcat-servlet-3.0-api.noarch', 'java-1.8.0-openjdk', 'java-1.8.0-openjdk-devel', 'mariadb.x86_64', 'mariadb-server.x86_64', 'mariadb-libs.i686', 'mariadb-libs.x86_64', 'MySQL-python', 'mysql-connector-java.noarch', 'apache-commons-dbcp.noarch', 'firewalld', 'mod_ssl', 'setroubleshoot.x86_64', 'setroubleshoot-plugins.noarch', 'setroubleshoot-server.x86_64']
+      state: absent
+
+  - name: Optimizing yum cache
+    shell:
+      cmd: |
+        sudo yum clean all

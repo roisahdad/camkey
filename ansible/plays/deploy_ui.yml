@@ -1,0 +1,50 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+# Verify services are active
+  - name: Ensure Apache is running
+    service:
+      name: httpd
+      state: started
+      enabled: yes
+  - name: Ensure mariadb is running
+    service:
+      name: mariadb
+      state: started
+      enabled: yes
+  - name: Ensure Tomcat is running
+    service:
+      name: tomcat
+      state: started
+      enabled: yes
+
+# Clean up old build files in /var/www/html
+  - name: Removing any old build files
+    shell:
+      cmd: |
+        sudo rm -Rf *.js *.js.map assets *.eot *.ico *.txt *.html *.woff* *.css .htaccess
+
+# If application server is a development instance download development build
+  - name: Copying development build
+    shell:
+      cmd: |
+        rsync -av --chmod=D2775,F0664 10.114.71.55:/home/{{ user }}/ui/camkey-manager/dist-dev/. .
+    when: mysql_role ==  "secondary"
+
+# If application server is a integration instance download production build
+  - name: Copying development build
+    shell:
+      cmd: |
+        rsync -av --chmod=D2775,F0664 10.114.71.55:/home/{{ user }}/ui/camkey-manager/dist-prod/. .
+    when: mysql_role ==  "primary"
+
+# Update group ownership for /var/www/html
+  - name: Update group ownership
+    file:
+      path: /var/www/html
+      state: directory
+      recurse: yes
+      group: www
+ 

@@ -1,0 +1,264 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+#  This tasks will be added once a password repository has been defined.
+#    - name: When applicable use password values in the password file
+#      include_vars:
+#        file: ../files/passwords.yml 
+
+# Verify services are stopped
+  - name: Ensure Tomcat is stopped
+    service:
+      name: tomcat
+      state: stopped
+  - name: Ensure MariaDB is stopped
+    service:
+      name: mariadb
+      state: stopped
+  - name: Ensure Apache is stopped
+    service:
+      name: httpd
+      state: stopped
+
+# Creating CAMKey directories and archives
+  - name: Create database backup directory
+    file:
+      path: /data/backups/database
+      state: directory
+      recurse: true
+  - name: Creating MariaDB data directory
+    file:
+      path: /data/mysql/
+      state: directory
+      recurse: true
+  - name: Create camkey_files directory
+    file: 
+      path: /var/lib/tomcat/camkey_files
+      owner: root
+      group: tomcat
+      state: directory
+      mode: "0775"
+  - name: Create camkey_files_archive directory
+    file: 
+      path: /var/lib/tomcat/camkey_files_archive
+      owner: root
+      group: tomcat
+      state: directory
+      mode: "0775"
+  - name: Create camkey_db_backup directory
+    file:
+      path: /var/lib/tomcat/camkey_db_backup
+      owner: root
+      group: tomcat
+      state: directory
+      mode: "0750"
+  - name: Create camkey tools directory
+    file:
+      path: /opt/extcamkey-tools
+      owner: root
+      group: root
+      state: directory
+      mode: "0775"
+  - name: Install CAMKEY Web services schema
+    copy:
+      src: ../files/dev_install.sql
+      dest: /data/mysql
+      owner: root
+      group: root
+      mode: "0775"
+  - name: Install CAMKEY Web services valid values tables
+    copy:  
+      src: ../files/dev_init.sql
+      dest: /data/mysql
+      owner: root
+      group: root
+      mode: "0775"
+
+# Start Mariadb service
+  - name: Starting mariadb service
+    service:
+      name: mariadb
+      state: started
+      enabled: yes
+
+# Configuring MariaDB
+  - name: MariaDB Global Config
+    template:
+      src: ../files/my.cnf
+      dest: /etc/my.cnf
+  - name: MariaDB Config
+    template:
+      src: ../files/server.cnf
+      dest: /etc/my.cnf.d/server.cnf
+  - name: Copy mariadb-java-client
+    copy:
+      src: ../files/mariadb-java-client-2.6.2.jar
+      dest: /usr/share/tomcat/lib/mariadb-java-client-2.6.2.jar
+      mode: "0644"
+      group: root
+  - name: Remove Anonymous Users
+    mysql_user:
+      name: ''
+      host_all: yes
+      state: absent
+  - name: Create CAMKey Database
+    mysql_db:
+      name: extcamkey
+      state: present
+  - name: Copy WAR file
+    copy:
+      src: ../files/extcamkey-web.war
+      dest: /var/lib/tomcat/webapps/
+      mode: "0644"
+        
+# Create MySQL accounts
+  - name: Create Readonly MySQL Users
+    mysql_user:
+      name: roeckuser
+      host: localhost
+      password: changeme
+      state: present
+      priv: "extcamkey.*:SELECT"
+  - name: Create Regular MySQL User
+    mysql_user:
+      name: eckuser
+      host: localhost
+      password: changeme
+      state: present
+      priv: "extcamkey.*:CREATE,DROP,DELETE,INSERT,SELECT,UPDATE"
+
+# Initialize CAMKey schema & valid values tables
+  - name: Initializing CAMKey Web Services schema
+    shell:
+      cmd: |
+        cd /data/mysql
+        sudo mysql < dev_install.sql
+  - name: Initializing CAMKEY Web services valid values tables
+    shell:
+      cmd: |
+        cd /data/mysql
+        sudo mysql < dev_init.sql
+
+# Stop and restart CAMKey services
+  - name: Stop MariaDB
+    service:
+      name: mariadb
+      state: stopped
+  - name: Start Apache
+    service: 
+      name: httpd
+      enabled: yes
+      state: started
+  - name: Start MariaDB
+    service: 
+      name: mariadb
+      enabled: yes
+      state: started
+  - name: Start Tomcat
+    service: 
+      name: tomcat
+      enabled: yes
+      state: started
+
+# This tasks will be added once a password repository has been defined.
+#    -name: Set MySQL root password
+#      mysql_user:
+#        name: root
+#        host: localhost
+#        password: "{{ camkey_db_root_password }}"
+#        state: present
+#
+#    - name: Install root .my.cnf
+#      template: 
+#        src: ../files/.my.cnf
+#        dest: /root/.my.cnf
+
+# This task to create MySQL accounts will be enabled once a password repository has been defined.
+#    - name: Create Readonly MySQL Users
+#      mysql_user:
+#        name: "{{ camkey_db_readonly_user }}"
+#        host: localhost
+#        password: "{{ camkey_db_readonly_password }}"
+#        state: present
+#        priv: "extcamkey.*:SELECT"
+#    - name: Create Regular MySQL User
+#      mysql_user:
+#        name: "{{ camkey_db_user }}"
+#        host: localhost
+#        password: "{{ camkey_db_password }}"
+#        state: present
+#        priv: "extcamkey.*:CREATE,DROP,DELETE,INSERT,SELECT,UPDATE"
+
+# Install cron jobs
+# This task will be enabled once a S3 bucket is defined.
+#    - name: "Install cron to copy database backups to S3 bucket"
+#      cron:
+#        name: "Backup MySQL Database dumps to S3"
+#        minute: "30"
+#        hour: "0"
+#        job: "s3cmd -F -P --delete-removed sync /data/backups/database/ s3://camkeybackups/database/"
+#      when: mysql_role == "master"
+
+  # - name: "Install cron to create gzip'd backup of the CAMKey database"
+    # cron:
+      # name: "Create gzip'd backup of CAMKey database in  /var/lib/tomcat/camkey_db_backup/"
+      # minute: "5"
+      # job: "/opt/extcamkey-tools/current/bin/camkey_db_backup.sh /var/lib/tomcat/camkey_db_backup/"
+    # when: mysql_role == "master"
+
+  # - name: "Install cron to remove excessive copies of the CAMKey database"
+    # cron:
+      # name: "Remove old copies of the CAMKey database"
+      # minute: "0"
+      # job: "ls -rt /data/backups/database/extcamkey_202*.sql.gz | head -n -20 | xargs rm > /dev/null 2>&1"
+    # when: mysql_role == "master"
+
+  # - name: "Install cron to reload the database from the master CAMKey server int-dev"
+    # cron:
+      # name: "Re-load database from the primary CAMKey server int-dev"
+      # minute: "10"
+      # job: "/opt/extcamkey-tools/current/bin/camkey_db_copy.sh int-dev.camkey.evoforge.org 8443 /etc/pki/tls/private/{{ hostname }}.pem > /dev/null 2>&1"
+    # when: mysql_role == "secondary"
+
+# These cron jobs tasks will be enabled if a Registry for CAMKey values is defined.
+#      - name: "Install cron to update LACs"
+#        cron:
+#          name: "Update LACs from registry"
+#          minute: "15"
+#          hour: "4,10,16,22"
+#          job: "/opt/extcamkey-tools/current/bin/update_lacs.sh int-dev.camkey.evoforge.org 8443 /etc/pki/tls/private/int-dev.camkey.evoforge.org.pem >> /opt/extcamkey-tools/current/logs/lacs_out.log 2>> /opt/extcamkey-tools/current/logs/lacs_err.log"
+#        when: mysql_role == "master"
+
+#      - name: "Install cron to update COIs"
+#        cron:
+#          name: "Update COIs from registry"
+#          minute: "20"
+#          hour: "4,10,16,22"
+#          job: "/opt/extcamkey-tools/current/bin/update_cois.sh int-dev.camkey.evoforge.org 8443 /etc/pki/tls/private/int-dev.camkey.evoforge.org.pem >> /opt/extcamkey-tools/current/logs/cois_out.log 2>> /opt/extcamkey-tools/current/logs/cois_err.log"
+#        when: mysql_role == "master"
+
+#      - name: "Install cron to update GVORGs"
+#        cron:
+#          name: "Update GVORGs from registry"
+#          minute: "25"
+#          hour: "4,10,16,22"
+#          job: "/opt/extcamkey-tools/current/bin/update_gvorgs.sh int-dev.camkey.evoforge.org 8443 /etc/pki/tls/private/int-dev.camkey.evoforge.org.pem >> /opt/extcamkey-tools/current/logs/gvorgs_out.log 2>> /opt/extcamkey-tools/current/logs/gvorgs_err.log"
+#        when: mysql_role == "master"
+
+#      - name: "Install cron to update REGIONs"
+#        cron:
+#          name: "Update REGIONs from registry"
+#          minute: "30"
+#          hour: "4,10,16,22"
+#          job: "/opt/extcamkey-tools/current/bin/update_regions.sh int-dev.camkey.evoforge.org 8443 /etc/pki/tls/private/int-dev.camkey.evoforge.org.pem >> /opt/extcamkey-tools/current/logs/regions_out.log 2>> /opt/extcamkey-tools/current/logs/regions_err.log"
+#        when: mysql_role == "master"
+
+#      - name: "Install cron to update TOPICs"
+#        cron:
+#          name: "Update TOPICs from registry"
+#          minute: "35"
+#          hour: "4,10,16,22"
+#          job: "/opt/extcamkey-tools/current/bin/update_topics.sh int-dev.camkey.evoforge.org 8443 /etc/pki/tls/private/int-dev.camkey.evoforge.org.pem >> /opt/extcamkey-tools/current/logs/topics_out.log 2>> /opt/extcamkey-tools/current/logs/topics_err.log"
+#        when: mysql_role == "master"

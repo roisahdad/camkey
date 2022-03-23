@@ -1,0 +1,23 @@
+{
+  "confluenceConfig": {
+    "links": [
+
+    ],
+    "supportMessage": "Contact <a href='mailto:camkey@evoforge.org'>camkey@evoforge.org</a> for support.",
+    "useConfluence": false
+  },
+  "contentSteward": "?",
+  "firstGvorgs": [
+
+  ],
+  "jiraConfig": {
+    "issueCollector": "none",
+    "issueCollectorJquery": "none",
+    "issuesPath": "none",
+    "useJira": false
+  },
+  "pagePublisher": "?",
+  "registryRoot": "",
+  "tmRoot": ""
+}
+

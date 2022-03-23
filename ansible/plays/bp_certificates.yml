@@ -1,0 +1,173 @@
+---
+- hosts: "{{ target }}"
+  become: yes
+  tasks:
+
+# Install all required packages
+  - name: Optimizing yum cache
+    shell:
+      cmd: |
+        sudo yum clean all && sudo yum makecache fast
+  - name: Install core packages
+    yum: 
+      name: ['httpd.x86_64', 'httpd-tools.x86_64', 'tomcat.noarch', 'tomcat-el-2.2-api.noarch', 'tomcat-jsp-2.2-api.noarch', 'tomcat-lib.noarch', 'tomcat-servlet-3.0-api.noarch', 'java-1.8.0-openjdk', 'java-1.8.0-openjdk-devel', 'mariadb.x86_64', 'mariadb-server.x86_64', 'mariadb-libs.i686', 'mariadb-libs.x86_64', 'MySQL-python', 'mysql-connector-java.noarch', 'apache-commons-dbcp.noarch', 'firewalld', 'mod_ssl', 'setroubleshoot.x86_64', 'setroubleshoot-plugins.noarch', 'setroubleshoot-server.x86_64']
+      state: latest
+
+# Creating certificate directory to host server certs
+    # - name: Create certificate directory 
+      # file: 
+        # path: /data/certificates/
+        # state: directory
+        # recurse: true
+
+# Copy server certs to /data/certificates
+  #  - name: Copying JKS server certs to /data/certificates
+    #  copy:
+      #  src: "{{ certificate_jks_src }}"
+      #  dest: "{{ certificate_dest }}"
+      #  mode: "0600"
+      #  group: root
+  #  - name: Copying JKS server certs to /data/certificates
+    #  copy:
+      #  src: "{{ certificate_jks_src }}"
+      #  dest: "{{ certificate_dest }}"
+      #  mode: "0600"
+      #  group: root
+
+# Install Greybox certs
+  - name: Push Proxy Greybox Server Certificate
+    copy:
+      src: "{{ ssl_certificate_src.crt_greybox }}"
+      dest: "{{ ssl_certificate_dest.crt_greybox }}"
+      mode: "0600"
+      group: root
+  - name: Push Greybox Proxy Key
+    copy:
+      src: "{{ ssl_certificate_src.key_greybox }}"
+      dest: "{{ ssl_certificate_dest.key_greybox }}"
+      mode: "0600"
+      group: root
+  - name: Push Greybox Localhost Bundle
+    copy:
+      src: "{{ ssl_certificate_src.p12_greybox }}"
+      dest: "{{ ssl_certificate_dest.p12_greybox }}"
+      mode: "0640"
+      group: root
+  - name: Push Greybox PEM
+    copy:
+      src: "{{ ssl_certificate_src.pem_greybox }}"
+      dest: "{{ ssl_certificate_dest.pem_greybox }}"
+      mode: "0644"
+      group: root
+  - name: Push Greybox Localhost Keystore
+    copy:
+      src: "{{ ssl_certificate_src.keystore_localhost }}"
+      dest: "{{ ssl_certificate_dest.keystore_localhost }}"
+      mode: "0640"
+      group: root
+  - name: Push Greybox Java Keystore
+    copy:
+      src: "{{ ssl_certificate_src.keystore_greybox }}"
+      dest: "{{ ssl_certificate_dest.keystore_greybox }}"
+      mode: "0644"
+      group: root
+  - name: Push Greybox PEM Java Bundle
+    copy:
+      src: "{{ ssl_certificate_src.keystore_bundle_greybox }}"
+      dest: "{{ ssl_certificate_dest.keystore_bundle_greybox }}"
+      mode: "0400"
+      group: root
+
+# Create symbolic keystore and bundle links
+  - name: Make symbolic link for keystore
+    file:
+      src: "{{ ssl_certificate_keystore_localhost }}"
+      dest: "{{ ssl_certificate_keystore_link }}"
+      state: link
+  - name: Make symbolic link for p12
+    file:
+      src: "{{ ssl_certificate_p12_greybox }}"
+      dest: "{{ ssl_certificate_p12_link }}"
+      state: link
+  - name: Make symbolic link for pem
+    file:
+      src: "{{ ssl_certificate_pem_greybox }}"
+      dest: "{{ ssl_certificate_pem_link }}"
+      state: link
+
+# Configure firewall service
+  - name: Verify firewall service is active
+    service:
+      name: firewalld
+      enabled: yes
+      state: started
+
+# Open tcp port 80
+  - name: Permit traffic on port 80/tcp
+    command: "firewall-cmd --permanent --zone=public --add-port=80/tcp"
+
+# Open tcp port 443
+  - name:  Permit traffic on port 443/tcp
+    command: "firewall-cmd --permanent --zone=public --add-port=443/tcp"
+
+#Open tcp port 3306
+  - name: Permit traffic on port 3306/tcp
+    command: "firewall-cmd --permanent --zone=public --add-port=3306/tcp"
+
+# Open tcp port 8443
+  - name: Permit traffic on port 8443/tcp
+    command: "firewall-cmd --permanent --zone=public --add-port=8443/tcp"
+
+# Reload firewall
+  - name: Reloading firewalld
+    command: "firewall-cmd --reload"
+
+# Permit selinux to allow Tomcat connectivity to DB
+  - name: Allow Tomcat to connect to MariaDB
+    shell:
+      cmd: |
+        sudo setsebool -P tomcat_can_network_connect_db 1
+
+# Creating www group and assign group ownership for /var/www/html
+  - name: Create www group
+    group:
+      name: www
+      state: present
+  - name: Assign group ownership to /var/www/html
+    file:
+      path: /var/www/html
+      owner: root
+      group: www
+      mode: "0775" 
+
+# Add users to www group
+  - name: Add users to www groups
+    user:
+      name: "{{ group_users }}"
+      groups: www
+      append: yes
+
+# Crontab to autoshutdown instances
+  - name: Creating autoshutdown cronjob
+    cron:
+      name: "Install autoshutdown at 2300Z"
+      minute: "0"
+      hour: "23"
+      job: "/sbin/shutdown -h 5"
+
+# Enable and start services
+  - name: Ensure Apache is running
+    service:
+      name: httpd
+      state: started
+      enabled: yes
+  - name: Ensure mariadb is running
+    service:
+      name: mariadb
+      state: started
+      enabled: yes
+  - name: Ensure Tomcat is running
+    service:
+      name: tomcat
+      state: started
+      enabled: yes
